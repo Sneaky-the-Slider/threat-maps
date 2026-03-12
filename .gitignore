@@ -1,0 +1,11 @@
+# Ignore sensitive files
+.env
+*.pem
+*.key
+id_rsa
+id_ed25519
+known_hosts
+
+# OS files
+.DS_Store
+Thumbs.db
