@@ -1,11 +1,42 @@
-# Ignore sensitive files
-.env
-*.pem
-*.key
-id_rsa
-id_ed25519
-known_hosts
+# Data / large files
+*.csv
+*.jsonl
+*.zip
+/data/large/
+*.geojson
+*.topojson
 
-# OS files
+# OS generated
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
+
+# Editors
+.vscode/
+.idea/
+*.sublime-*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.env
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Logs
+*.log
+logs/
+
+# Secrets - should be in secrets repo
+*.key
+*.pem
+secrets/
