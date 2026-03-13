@@ -39,6 +39,12 @@ GNQL is GreyNoise's query language for searching internet-wide scanning activity
 - `metadata.country:CN tags:*Brute* last_seen:>now-3d`
 - `tags:*Scanner* classification:malicious`
 
-## Using GNQL in Scripts (Enterprise)
+## SDK Script
 
-If you have a GreyNoise enterprise key, you can run GNQL via the official SDK or REST API. See `src/fetch_threat_data_gnql.py` for a starter script.
+Use the SDK-based GNQL runner:
+
+```sh
+pip install greynoise
+python src/query_greynoise_gnql.py --api-key YOUR_KEY --query "classification:malicious last_seen:>now-7d" \
+  --output data/gnql_results.json
+```

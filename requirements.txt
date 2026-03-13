@@ -1,0 +1,14 @@
+# Threat Maps Dependencies
+# Install with: pip install -r requirements.txt
+
+# OTX SDK - AlienVault threat intelligence
+OTXv2>=4.0.0
+
+# HTTP requests for geo enrichment
+requests>=2.31.0
+
+# Optional: GeoIP offline lookup
+maxminddb-geolite2>=2018.703
+
+# Optional: Data processing
+pandas>=2.0.0

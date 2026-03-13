@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Threat Maps Docs</title>
+    <style>
+      :root {
+        --bg: #0b0f17;
+        --ink: #e5e7eb;
+        --accent: #60a5fa;
+        --card: #111827;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Trebuchet MS", "Lucida Sans Unicode", sans-serif;
+        background: radial-gradient(circle at top left, #111827, var(--bg));
+        color: var(--ink);
+      }
+      .wrap {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 48px 20px;
+      }
+      header {
+        display: grid;
+        gap: 12px;
+        margin-bottom: 28px;
+      }
+      h1 { margin: 0; font-size: 2.2rem; }
+      p { margin: 0; line-height: 1.6; }
+      .cards {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        margin-top: 24px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid #1f2937;
+        border-radius: 14px;
+        padding: 16px;
+      }
+      .card a {
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .badge {
+        display: inline-block;
+        background: #1f2937;
+        color: #93c5fd;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 0.85rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <span class="badge">Docs</span>
+        <h1>Threat Maps</h1>
+        <p>Documentation index for threat data sources, tooling, and GNQL.</p>
+      </header>
+
+      <section class="cards">
+        <div class="card">
+          <h2>Data Sources</h2>
+          <p>Public and community feeds for sample data.</p>
+          <p><a href="data-sources.md">Read data sources</a></p>
+        </div>
+        <div class="card">
+          <h2>Tools and References</h2>
+          <p>Libraries and formats for mapping and analysis.</p>
+          <p><a href="tools-references.md">Read tools</a></p>
+        </div>
+        <div class="card">
+          <h2>GNQL</h2>
+          <p>GreyNoise query language overview and examples.</p>
+          <p><a href="gnql.md">Read GNQL</a></p>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

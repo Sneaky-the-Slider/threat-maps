@@ -71,6 +71,28 @@ cat ips.txt | xargs -I {} curl -s ipapi.co/{}/json | jq '.ip, .country_name'
 
 ## APIs Quick Reference
 
+### AlienVault OTX (OTXv2 SDK)
+```python
+from OTXv2 import OTXv2, IndicatorTypes
+
+otx = OTXv2("YOUR_API_KEY")
+
+# Fetch your subscribed pulses
+pulses = otx.get_subscribed(page=1, limit=20)
+
+# Search pulses
+results = otx.search_pulses("ransomware", max_results=10)
+
+# Get pulse details
+pulse = otx.get_pulse_details(pulse_id)
+
+# Extract IPv4 indicators
+for pulse in pulses:
+    for ind in pulse.get('indicators', []):
+        if ind['type'] == IndicatorTypes.IPv4:
+            print(ind['indicator'])
+```
+
 ### GreyNoise
 ```bash
 curl -H "key: YOUR_API_KEY" \
