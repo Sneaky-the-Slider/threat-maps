@@ -12,3 +12,8 @@ maxminddb-geolite2>=2018.703
 
 # Optional: Data processing
 pandas>=2.0.0
+
+# TAXII/STIX 1.x support for OTX TAXII feeds
+cabby>=0.1.21
+stix>=1.2.0.12  # python-stix for STIX 1.x parsing (not stix2)
+lxml>=4.9.0     # XML parser for STIX packages
