@@ -16,3 +16,4 @@ See [usage.md](usage.md) for concrete command examples and the HTML map demo.
 - [OTX TAXII](taxii-otx.md)
 - [Usage](usage.md)
 - [Honeypots](honeypots.md)
+- [Real-Time Log Processing](real-time-log-processing.md)

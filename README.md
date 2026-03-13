@@ -59,6 +59,27 @@ Honeypots are decoy systems or services designed to appear vulnerable and attrac
 
 See [docs/honeypots.md](docs/honeypots.md) for a full overview, classifications, tooling, and operational considerations.
 
+## Real-Time Log Processing
+See [docs/real-time-log-processing.md](docs/real-time-log-processing.md) for an asyncio-based Cowrie tailer, best practices, and integration ideas for live threat maps.
+
+### Quick Start: Cowrie SSH Honeypot
+
+For a fast way to generate real attack data for your threat maps:
+
+```bash
+# Deploy Cowrie via Docker
+docker run -d --name cowrie -p 2222:2222 \
+  -v cowrie-logs:/cowrie/var/log/cowrie \
+  cowrie/cowrie:latest
+
+# Parse logs and enrich with geo data
+python src/parse_cowrie_logs.py --input cowrie.json --output data/cowrie_enriched.json --geoip
+
+# Visualize on your threat map
+```
+
+See [docs/honeypot-deployment.md](docs/honeypot-deployment.md) for full deployment guide and T-Pot integration.
+
 ## Preview
 ![Threat map demo preview](docs/assets/map-demo.svg)
 
@@ -113,6 +134,15 @@ python src/fetch_threat_data_otx_taxii_stix.py --api-key YOUR_KEY --collection u
   --output data/otx_taxii_stix.json --enrich-geo
 ```
 
+### Parse Cowrie Honeypot Logs
+```sh
+# Basic parsing
+python src/parse_cowrie_logs.py --input cowrie.json --output data/cowrie_enriched.json
+
+# With local GeoIP database (faster, offline)
+python src/parse_cowrie_logs.py --input cowrie.json --output data/cowrie_enriched.json --geoip --geoip-db GeoLite2-City.mmdb
+```
+
 ### Map Demo (HTML)
 1. Start a local server.
 ```sh
@@ -123,6 +153,24 @@ python -m http.server 8000
 http://localhost:8000/src/generate_map.html
 ```
 
+### Real-Time Threat Map (WebSocket + Heatmap Aggregation)
+1. Start the real-time server (requires Cowrie log running):
+```sh
+uvicorn src.realtime_server:app --host 0.0.0.0 --port 8000
+```
+2. Open the real-time map in a browser.
+```text
+http://localhost:8000
+```
+
+Features:
+- Live attack arcs from honeypot events
+- Server-side heatmap aggregation (grid, H3, or geohash)
+- Configurable sliding window (default: 30 minutes)
+- Optimized for high-volume attack data
+
+See [docs/realtime-heatmap.md](docs/realtime-heatmap.md) for configuration and tuning.
+
 ![Threat map demo preview](docs/assets/map-demo.svg)
 
 ## Project Status
@@ -130,10 +178,13 @@ http://localhost:8000/src/generate_map.html
 This project is in **prototype** stage. Scripts work individually against live APIs, but there is no unified pipeline or production deployment yet. Contributions and feedback are welcome.
 
 ## Features / Planned
-- [ ] Live threat feed ingestion (e.g., from AlienVault OTX, GreyNoise, etc.)
-- [ ] World map visualizations (D3.js, Leaflet, Mapbox GL)
-- [ ] Sample honeypot attack logs → geo-mapped
+- [x] Live threat feed ingestion (AlienVault OTX, GreyNoise, AbuseIPDB)
+- [x] World map visualizations (Leaflet, D3.js examples)
+- [x] Honeypot integration (Cowrie log parsing + geo enrichment)
+- [x] Real-time heatmap aggregation (grid, H3, geohash binning)
+- [x] WebSocket streaming for live attack visualization
 - [ ] Offline-capable map examples
+- [ ] 3D globe visualization (Three.js/WebGL)
 
 ## Data Sources & Feeds
 See [docs/data-sources.md](./docs/data-sources.md) for the full list.

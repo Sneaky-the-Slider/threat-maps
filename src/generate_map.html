@@ -7,40 +7,57 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0a0a0a; color: #fff; }
+        body { font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; background: #0a0a0a; color: #fff; }
         #map { height: 100vh; width: 100%; background: #0a0a0a; }
         .info-panel {
             position: absolute; top: 10px; right: 10px; z-index: 1000;
-            background: rgba(0, 0, 0, 0.8); padding: 15px; border-radius: 8px;
-            border: 1px solid #333; max-width: 300px;
+            background: rgba(0, 0, 0, 0.8); padding: 14px; border-radius: 8px;
+            border: 1px solid #333; max-width: 320px;
         }
-        .info-panel h3 { color: #00ff00; margin-bottom: 10px; font-size: 14px; }
+        .info-panel h3 { color: #00ff00; margin-bottom: 8px; font-size: 14px; }
         .info-panel p { font-size: 12px; margin: 5px 0; }
         .stat { display: inline-block; margin: 5px 10px 5px 0; }
         .stat-value { color: #00ff00; font-weight: bold; }
+        .controls {
+            position: absolute; top: 10px; left: 10px; z-index: 1000;
+            background: rgba(0, 0, 0, 0.7); padding: 10px 12px; border-radius: 8px;
+            border: 1px solid #333; font-size: 12px;
+        }
+        .controls label { margin-left: 8px; cursor: pointer; }
         .leaflet-popup-content-wrapper { background: rgba(0, 0, 0, 0.9); color: #fff; border: 1px solid #00ff00; }
         .leaflet-popup-tip { background: rgba(0, 0, 0, 0.9); }
     </style>
 </head>
 <body>
     <div id="map"></div>
+
+    <div class="controls">
+        <input type="checkbox" id="show-heatmap" checked>
+        <label for="show-heatmap">Show heatmap overlay</label>
+    </div>
+
     <div class="info-panel">
-        <h3>🛡️ Threat Map</h3>
+        <h3>Threat Map</h3>
         <div class="stat">Attacks: <span class="stat-value" id="attack-count">0</span></div>
         <div class="stat">Countries: <span class="stat-value" id="country-count">0</span></div>
-        <p style="margin-top: 10px; color: #888; font-size: 11px;">Sample data - connect live feed for real attacks</p>
+        <p style="margin-top: 10px; color: #888; font-size: 11px;">Sample data - connect a live feed for real attacks</p>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.migration@latest/dist/leaflet.migration.min.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     <script>
-        // Initialize map with dark theme
-        const map = L.map('map').setView([20, 0], 2);
-        
+        // Map setup
+        const map = L.map('map', { zoomControl: true, attributionControl: true }).setView([20, 0], 2);
+
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '© OpenStreetMap © CARTO',
             subdomains: 'abcd',
             maxZoom: 19
         }).addTo(map);
+
+        const honeypotLatLng = [34.05, -118.24];
+        L.marker(honeypotLatLng).addTo(map).bindPopup('Honeypot - Los Angeles, CA');
 
         // Sample attack data (replace with live feed)
         const attacks = [
@@ -51,38 +68,110 @@
             { lat: 48.3794, lng: 31.1656, country: "Ukraine", type: "TELNET_ATTEMPT", ip: "91.240.118.172" }
         ];
 
-        // Add markers
+        // Migration layer (arcs)
+        const migrationLayer = L.migrationLayer ? L.migrationLayer({
+            map: map,
+            data: [],
+            pulsePeriod: 5000,
+            opacity: 0.75,
+            lineWidth: 2,
+            lineColor: '#ff4444',
+            glowColor: '#ffaaaa',
+            glowWidth: 10
+        }).addTo(map) : null;
+
+        // Heatmap layer
+        const heatLayer = L.heatLayer([], {
+            radius: 25,
+            maxZoom: 17,
+            gradient: { 0.4: 'blue', 0.65: 'lime', 1: 'red' },
+            blur: 15,
+            max: 1.0
+        }).addTo(map);
+
+        let heatPoints = [];
+        const MAX_AGE_MS = 120000;
+
+        function updateHeatmap() {
+            const points = heatPoints.map(p => [p.lat, p.lng, p.intensity || 1]);
+            heatLayer.setLatLngs(points);
+        }
+
+        function pruneOldPoints() {
+            const now = Date.now();
+            heatPoints = heatPoints.filter(p => now - p.timestamp < MAX_AGE_MS);
+            updateHeatmap();
+        }
+
+        // Stats
         const countries = new Set();
-        attacks.forEach(attack => {
+        const attackCountEl = document.getElementById('attack-count');
+        const countryCountEl = document.getElementById('country-count');
+        let attackCount = 0;
+
+        function addAttack(attack) {
             countries.add(attack.country);
-            
+            attackCount += 1;
+            attackCountEl.textContent = attackCount;
+            countryCountEl.textContent = countries.size;
+
             const marker = L.circleMarker([attack.lat, attack.lng], {
-                radius: 8,
+                radius: 7,
                 fillColor: "#ff4444",
                 color: "#ff0000",
                 weight: 2,
                 opacity: 0.8,
                 fillOpacity: 0.6
             }).addTo(map);
-            
-            marker.bindPopup(`
-                <strong style="color: #ff4444;">${attack.type}</strong><br>
-                Country: ${attack.country}<br>
-                IP: ${attack.ip}<br>
-            `);
+
+            marker.bindPopup(
+                `<strong style="color: #ff4444;">${attack.type}</strong><br>` +
+                `Country: ${attack.country}<br>` +
+                `IP: ${attack.ip}<br>`
+            );
+
+            if (migrationLayer) {
+                const arcData = [{
+                    from: [attack.lng, attack.lat],
+                    to: [honeypotLatLng[1], honeypotLatLng[0]],
+                    value: 1,
+                    label: `${attack.country} -> Honeypot`
+                }];
+                migrationLayer.setData(migrationLayer.options.data.concat(arcData));
+                if (migrationLayer.options.data.length > 50) {
+                    migrationLayer.setData(migrationLayer.options.data.slice(-50));
+                }
+            }
+
+            heatPoints.push({
+                lat: attack.lat,
+                lng: attack.lng,
+                intensity: 1,
+                timestamp: Date.now()
+            });
+            updateHeatmap();
+        }
+
+        attacks.forEach(addAttack);
+
+        // Toggle heatmap
+        document.getElementById('show-heatmap').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                map.addLayer(heatLayer);
+            } else {
+                map.removeLayer(heatLayer);
+            }
         });
 
-        // Update stats
-        document.getElementById('attack-count').textContent = attacks.length;
-        document.getElementById('country-count').textContent = countries.size;
-
-        // Add pulse animation effect
+        // Subtle pulsing for markers
         setInterval(() => {
             const markers = document.querySelectorAll('.leaflet-marker-pane circle');
             markers.forEach((m, i) => {
                 m.style.opacity = 0.4 + Math.sin(Date.now() / 500 + i) * 0.3;
             });
         }, 100);
+
+        setInterval(pruneOldPoints, 30000);
     </script>
 </body>
 </html>

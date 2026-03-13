@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Threat Map</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0f;
+            color: #fff;
+        }
+        
+        #map {
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        .stats-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 15px 20px;
+            min-width: 200px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .stats-panel h2 {
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            font-size: 18px;
+        }
+        
+        .stat-value {
+            font-weight: bold;
+            color: #00ff88;
+        }
+        
+        .stat-label {
+            color: #888;
+            font-size: 14px;
+        }
+        
+        .connection-status {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ff4444;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-dot.connected {
+            background: #00ff88;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .legend {
+            position: absolute;
+            bottom: 30px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        
+        .legend h3 {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 10px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 5px 0;
+            font-size: 12px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 3px;
+            border-radius: 2px;
+        }
+        
+        /* Dark map tiles */
+        .leaflet-layer {
+            filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div class="stats-panel">
+        <h2>Threat Statistics</h2>
+        <div class="stat">
+            <span class="stat-value" id="attackCount">0</span>
+            <span class="stat-label">Attacks (window)</span>
+        </div>
+        <div class="stat">
+            <span class="stat-value" id="heatmapCells">0</span>
+            <span class="stat-label">Heatmap cells</span>
+        </div>
+        <div class="stat">
+            <span class="stat-value" id="lastUpdate">--:--:--</span>
+            <span class="stat-label">Last update</span>
+        </div>
+    </div>
+    
+    <div class="connection-status">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Disconnected</span>
+    </div>
+    
+    <div class="legend">
+        <h3>Visualization</h3>
+        <div class="legend-item">
+            <div class="legend-color" style="background: radial-gradient(circle, #ff0000, transparent);"></div>
+            <span>Attack arcs (recent)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: linear-gradient(90deg, #00ff88, #0088ff);"></div>
+            <span>Heatmap intensity</span>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Leaflet.heat for heatmap -->
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
+    <script>
+        // Configuration
+        const HONEYPOT_LAT = 34.0522;  // Los Angeles
+        const HONEYPOT_LON = -118.2437;
+        const WS_URL = `ws://${window.location.host}/ws`;
+        
+        // State
+        let attackCount = 0;
+        let ws = null;
+        let recentArcs = [];
+        let lastSentBounds = null;
+        let desiredH3Res = 5;
+        const BOUNDS_SEND_THROTTLE_MS = 800;  // Throttle bounds sending
+        let boundsSendTimeout = null;
+
+        // Get H3 resolution based on zoom level
+        function zoomToH3Resolution(zoom) {
+            if (zoom >= 12) return 9;       // City level (~500m)
+            if (zoom >= 10) return 8;       // Metro level (~1km)
+            if (zoom >= 8) return 7;        // Regional level (~5km)
+            if (zoom >= 6) return 6;        // Country level (~20km)
+            if (zoom >= 4) return 5;        // Continental level (~100km)
+            if (zoom >= 2) return 4;        // Large region
+            return 3;                        // Global view
+        }
+
+        // Get current map bounds as JSON
+        function getBoundsJson() {
+            const b = map.getBounds();
+            return {
+                southWest: {
+                    lat: b.getSouthWest().lat,
+                    lng: b.getSouthWest().lng
+                },
+                northEast: {
+                    lat: b.getNorthEast().lat,
+                    lng: b.getNorthEast().lng
+                }
+            };
+        }
+
+        // Send viewport bounds to server (throttled)
+        function sendBoundsToServer() {
+            if (boundsSendTimeout) {
+                clearTimeout(boundsSendTimeout);
+            }
+            
+            boundsSendTimeout = setTimeout(() => {
+                const bounds = getBoundsJson();
+                
+                // Simple throttle: only send if meaningfully different
+                if (lastSentBounds && 
+                    Math.abs(lastSentBounds.southWest.lat - bounds.southWest.lat) < 0.01 &&
+                    Math.abs(lastSentBounds.southWest.lng - bounds.southWest.lng) < 0.01 &&
+                    Math.abs(lastSentBounds.northEast.lat - bounds.northEast.lat) < 0.01 &&
+                    Math.abs(lastSentBounds.northEast.lng - bounds.northEast.lng) < 0.01) {
+                    return;
+                }
+                lastSentBounds = bounds;
+
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: "set_viewport",
+                        bounds: bounds
+                    }));
+                    console.log(`Sent viewport bounds: SW[${bounds.southWest.lat.toFixed(2)}, ${bounds.southWest.lng.toFixed(2)}] NE[${bounds.northEast.lat.toFixed(2)}, ${bounds.northEast.lng.toFixed(2)}]`);
+                }
+            }, BOUNDS_SEND_THROTTLE_MS);
+        }
+
+        // Send resolution change to server
+        function sendResolutionToServer(zoom) {
+            const newRes = zoomToH3Resolution(zoom);
+            if (newRes !== desiredH3Res && ws && ws.readyState === WebSocket.OPEN) {
+                desiredH3Res = newRes;
+                ws.send(JSON.stringify({
+                    type: "set_resolution",
+                    resolution: newRes
+                }));
+                console.log(`Sent H3 resolution: ${newRes} (zoom: ${zoom})`);
+            }
+        }
+        
+        // Initialize map
+        const map = L.map('map', {
+            center: [HONEYPOT_LAT, HONEYPOT_LON],
+            zoom: 3,
+            zoomControl: false,
+            attributionControl: false
+        });
+        
+        // Add base layer (OpenStreetMap with dark filter via CSS)
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(map);
+        
+        // Heatmap layer
+        let heatLayer = L.heatLayer([], {
+            radius: 25,
+            blur: 15,
+            maxZoom: 10,
+            gradient: {
+                0.0: '#000080',
+                0.25: '#00ff00',
+                0.5: '#ffff00',
+                0.75: '#ff8800',
+                1.0: '#ff0000'
+            }
+        }).addTo(map);
+        
+        // Arc layer for individual attacks (using simple circles for now)
+        const arcLayer = L.layerGroup().addTo(map);
+        
+        // Honeypot marker
+        L.circleMarker([HONEYPOT_LAT, HONEYPOT_LON], {
+            radius: 10,
+            color: '#00ff88',
+            fillColor: '#00ff88',
+            fillOpacity: 0.8,
+            weight: 2
+        }).addTo(map).bindPopup('Your Honeypot');
+        
+        // Draw arc from attack location to honeypot
+        function drawArc(fromLat, fromLon, toLat, toLon, intensity = 1) {
+            const latlngs = [
+                [fromLat, fromLon],
+                [toLat, toLon]
+            ];
+            
+            const polyline = L.polyline(latlngs, {
+                color: `rgba(255, ${255 - intensity * 100}, 0, 0.6)`,
+                weight: 2,
+                opacity: 0.8,
+                dashArray: '5, 10',
+                lineCap: 'round'
+            }).addTo(arcLayer);
+            
+            // Remove after animation
+            setTimeout(() => {
+                arcLayer.removeLayer(polyline);
+            }, 3000);
+        }
+        
+        // Update stats display
+        function updateStats(count, cells, timestamp) {
+            attackCount = count;
+            document.getElementById('attackCount').textContent = count.toLocaleString();
+            document.getElementById('heatmapCells').textContent = cells.toLocaleString();
+            
+            if (timestamp) {
+                const time = new Date(timestamp).toLocaleTimeString();
+                document.getElementById('lastUpdate').textContent = time;
+            }
+        }
+        
+        // WebSocket connection
+        function connect() {
+            ws = new WebSocket(WS_URL);
+
+            ws.onopen = () => {
+                console.log('Connected to threat map server');
+                document.getElementById('statusDot').classList.add('connected');
+                document.getElementById('statusText').textContent = 'Connected';
+                
+                // Send initial viewport bounds and resolution
+                sendBoundsToServer();
+                sendResolutionToServer(map.getZoom());
+            };
+
+            ws.onclose = () => {
+                console.log('Disconnected from server');
+                document.getElementById('statusDot').classList.remove('connected');
+                document.getElementById('statusText').textContent = 'Disconnected';
+
+                // Reconnect after 3 seconds
+                setTimeout(connect, 3000);
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+
+                if (msg.type === 'attack') {
+                    // Handle individual attack (for arcs)
+                    const data = msg.data;
+                    if (!data.lat || !data.lon) return;
+
+                    // Draw arc
+                    drawArc(data.lat, data.lon, HONEYPOT_LAT, HONEYPOT_LON,
+                            data.details?.success ? 3 : 1);
+                }
+                else if (msg.type === 'heatmap_update') {
+                    // Update heatmap with aggregated data
+                    const heatmapData = msg.data;  // [[lat, lng, intensity], ...]
+                    heatLayer.setLatLngs(heatmapData);
+
+                    // Update stats with filtered count if available
+                    const count = msg.filtered_count || msg.count || heatmapData.length;
+                    const cells = msg.hex_count || heatmapData.length;
+                    updateStats(count, cells, msg.timestamp);
+                    
+                    // Log viewport filtering stats
+                    if (msg.viewport_active) {
+                        console.log(`Viewport active: ${msg.filtered_count}/${msg.raw_count} points → ${msg.hex_count} hexes`);
+                    }
+                }
+            };
+        }
+
+        // Start connection
+        connect();
+
+        // Send viewport bounds on map move/zoom
+        map.on('moveend zoomend', () => {
+            sendBoundsToServer();
+            sendResolutionToServer(map.getZoom());
+        });
+        
+        // Add zoom control
+        L.control.zoom({
+            position: 'bottomright'
+        }).addTo(map);
+    </script>
+</body>
+</html>

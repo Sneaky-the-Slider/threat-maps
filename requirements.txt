@@ -9,6 +9,7 @@ requests>=2.31.0
 
 # Optional: GeoIP offline lookup
 maxminddb-geolite2>=2018.703
+geoip2>=4.0.0  # For Cowrie log parsing (MaxMind GeoLite2)
 
 # Optional: Data processing
 pandas>=2.0.0
@@ -17,3 +18,12 @@ pandas>=2.0.0
 cabby>=0.1.21
 stix>=1.2.0.12  # python-stix for STIX 1.x parsing (not stix2)
 lxml>=4.9.0     # XML parser for STIX packages
+
+# Real-time heatmap aggregation (optional)
+h3>=4.0.0       # Hexagonal binning (v4+ API: latlng_to_cell/cell_to_latlng)
+geohash2>=1.2.0 # Geohash binning alternative
+
+# Real-time WebSocket server (optional)
+fastapi>=0.100.0
+uvicorn>=0.23.0
+websockets>=11.0
