@@ -55,9 +55,20 @@ python src/fetch_threat_data_otx_taxii_stix.py --api-key KEY --collection user_s
 | OTX TAXII | OTX key as username | `cabby` + `stix`/`lxml` |
 | IP geolocation | Varies | `requests` (ipapi.co, ipinfo.io, ip-api.com) |
 
-## Notes
+## Testing
 
-- No test suite exists yet
+```bash
+python -m pytest tests/ -v
+```
+
+Tests mock all external API calls. STIX XML parsing tests (`TestExtractIpv4FromStix`) require `lxml` and are skipped if unavailable.
+
+## CI
+
+GitHub Actions workflow at `.github/workflows/ci.yml` runs `pytest` on Python 3.10/3.11/3.12 for pushes and PRs to `main`.
+
+## Notes
 - Output JSON goes to `data/` (gitignored)
 - API keys go in `.env` (see `.env.example`); never commit credentials
 - Rate limiting is handled inline with `time.sleep()` calls; GreyNoise Community is especially strict (6s between requests)
+- Personal dotfiles (`.gitconfig`, `.ssh-config`) are gitignored; do not add them back

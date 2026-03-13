@@ -36,7 +36,14 @@ yarn-error.log
 *.log
 logs/
 
+# Output data
+data/
+
 # Secrets - should be in secrets repo
 *.key
 *.pem
 secrets/
+
+# Personal dotfiles
+.gitconfig
+.ssh-config
