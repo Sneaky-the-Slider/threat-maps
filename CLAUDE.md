@@ -37,12 +37,37 @@ python src/fetch_threat_data_otx_taxii.py --api-key KEY --collection user_sneaky
 python src/fetch_threat_data_otx_taxii_stix.py --api-key KEY --collection user_sneaky --enrich-geo
 ```
 
+## Real-Time Server
+
+FastAPI WebSocket server that tails Cowrie honeypot logs, enriches with geo data, and broadcasts to connected map clients.
+
+```bash
+# Start the server (requires cowrie.json log file)
+uvicorn src.realtime_server:app --host 0.0.0.0 --port 8000
+
+# Custom H3 resolution and window
+uvicorn src.realtime_server:app --host 0.0.0.0 --port 8000 \
+  --app-args "--cowrie-log cowrie.json --h3-resolution 7 --window-minutes 30"
+```
+
+- **WebSocket at `/ws`** sends two message types: `"attack"` (individual events for arcs) and `"heatmap_update"` (aggregated hex data)
+- **Client can send**: `{"type": "refresh"}`, `{"type": "set_viewport", "bounds": {...}}`, `{"type": "set_resolution", "resolution": 8}`
+- **`/api/status`** returns buffer size, connection count, aggregation method, and viewport state
+- **Frontend**: `src/realtime_map.html` (Leaflet.js + leaflet.heat, dark theme)
+
 ## Architecture
 
 - **Data pipeline pattern**: Each `src/fetch_*.py` script follows the same flow: fetch from API -> extract IPv4 indicators -> optional `--enrich-geo` via ip-api.com -> write JSON to `data/`
+- **Real-time pipeline**: `realtime_server.py` tails Cowrie log -> `parse_cowrie_line()` -> geo enrich via ip-api.com -> buffer in `recent_points` -> `aggregate_and_broadcast()` aggregates via H3 hexes on a timer
+- **Aggregation** (`heatmap_aggregator.py`): Three methods with the same `.aggregate(points)` interface returning `[[lat, lng, intensity], ...]`:
+  - `H3Aggregator` (default) — hexagonal binning via Uber H3 (requires `h3>=4.0.0`)
+  - `GridAggregator` — simple lat/lon rounding (fallback if h3 not installed)
+  - `GeohashAggregator` — geohash-based (requires `geohash2`)
+- **Viewport filtering**: Server filters points to client's visible map bounds before aggregation, reducing payload size
 - **Two TAXII parsers**: `_otx_taxii.py` uses raw lxml XPath; `_otx_taxii_stix.py` uses the python-stix library for richer STIX 1.x metadata extraction
 - **`fetch_threat_data_gnql.py`** is a thin wrapper that imports from `query_greynoise_gnql.py`
 - **`src/generate_map.html`**: Standalone Leaflet.js dark-themed map with sample hardcoded data; intended to be connected to live JSON feeds from the scripts
+- **Cowrie log parser** (`parse_cowrie_logs.py`): Batch mode — parses cowrie.json, enriches with geo (MaxMind GeoLite2 or ip-api.com), outputs structured JSON
 - **Geo enrichment**: All scripts share the same pattern using free ip-api.com with 1.5s sleep between requests for rate limiting
 
 ## Key API Dependencies
@@ -54,6 +79,8 @@ python src/fetch_threat_data_otx_taxii_stix.py --api-key KEY --collection user_s
 | AlienVault OTX | OTX API key | `OTXv2` SDK |
 | OTX TAXII | OTX key as username | `cabby` + `stix`/`lxml` |
 | IP geolocation | Varies | `requests` (ipapi.co, ipinfo.io, ip-api.com) |
+| H3 hexagonal binning | None | `h3` (v4+ API) |
+| Real-time server | None | `fastapi` + `uvicorn` + `websockets` |
 
 ## Testing
 
